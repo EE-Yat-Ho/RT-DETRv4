@@ -187,6 +187,27 @@ class DetSolver(BaseSolver):
                     checkpoint_paths.append(self.output_dir / f'checkpoint{epoch:04}.pth')
                 for checkpoint_path in checkpoint_paths:
                     dist_utils.save_on_master(self.state_dict(), checkpoint_path)
+                    # Log checkpoint to MLflow for resume capability
+                    if hasattr(self, 'mlflow_run') and self.mlflow_run and dist_utils.is_main_process():
+                        try:
+                            import mlflow
+                            # Log last.pth every epoch, checkpoint{epoch:04}.pth periodically
+                            artifact_name = "checkpoints/last.pth" if checkpoint_path.name == "last.pth" else f"checkpoints/{checkpoint_path.name}"
+                            mlflow.log_artifact(str(checkpoint_path), artifact_path=artifact_name)
+                        except Exception as e:
+                            print(f"Warning: Failed to log checkpoint to MLflow: {e}")
+
+            # Save checkpoint for stage 2 as well (for resume capability)
+            if self.output_dir and epoch >= self.train_dataloader.collate_fn.stop_epoch:
+                checkpoint_path = self.output_dir / 'last.pth'
+                dist_utils.save_on_master(self.state_dict(), checkpoint_path)
+                # Log checkpoint to MLflow for resume capability
+                if hasattr(self, 'mlflow_run') and self.mlflow_run and dist_utils.is_main_process():
+                    try:
+                        import mlflow
+                        mlflow.log_artifact(str(checkpoint_path), artifact_path="checkpoints/last.pth")
+                    except Exception as e:
+                        print(f"Warning: Failed to log checkpoint to MLflow: {e}")
 
             module = self.ema.module if self.ema else self.model
             test_stats, coco_evaluator = evaluate(
