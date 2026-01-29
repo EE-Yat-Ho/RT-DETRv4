@@ -103,12 +103,13 @@ class BaseSolver(object):
                 run_name = cfg.mlflow_run_name if cfg.mlflow_run_name else f"rt-detrv4-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
                 self.mlflow_run = mlflow.start_run(run_name=run_name)
                 atexit.register(mlflow.end_run)
-                print(f"MLflow run started: {self.mlflow_run.info.run_id}")
+                print(f"✏️ MLflow run started "
+                      f"(experiment={cfg.mlflow_experiment_name}, run_name={run_name}, run_id={self.mlflow_run.info.run_id})")
             except ImportError:
-                print("Warning: mlflow not installed, skipping MLflow logging")
+                print("✏️⚠️ Warning: mlflow not installed, skipping MLflow logging")
                 self.mlflow_run = None
             except Exception as e:
-                print(f"Warning: Failed to initialize MLflow: {e}")
+                print(f"✏️⚠️ Warning: Failed to initialize MLflow: {e}")
                 self.mlflow_run = None
 
     def cleanup(self):
@@ -117,6 +118,7 @@ class BaseSolver(object):
         if hasattr(self, 'mlflow_run') and self.mlflow_run:
             try:
                 import mlflow
+                print("✏️ MLflow run ending")
                 mlflow.end_run()
             except:
                 pass

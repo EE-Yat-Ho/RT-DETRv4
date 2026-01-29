@@ -62,8 +62,9 @@ class DetSolver(BaseSolver):
                 # Filter out None values
                 params_to_log = {k: v for k, v in params_to_log.items() if v is not None}
                 mlflow.log_params(params_to_log)
+                print(f"✏️ MLflow params logged: {list(params_to_log.keys())}")
             except Exception as e:
-                print(f"Warning: Failed to log parameters to MLflow: {e}")
+                print(f"✏️⚠️ Warning: Failed to log parameters to MLflow: {e}")
 
         top1 = 0
         best_stat = {'epoch': -1, }
@@ -93,14 +94,15 @@ class DetSolver(BaseSolver):
             try:
                 import mlflow
                 if hasattr(self, 'optimizer') and self.optimizer is not None:
-                    if hasattr(self.optimizer, 'param_groups') and len(self.optimizer.param_groups) > 0:
+                    if hasattr(self, 'param_groups') and len(self.optimizer.param_groups) > 0:
                         first_group = self.optimizer.param_groups[0]
                         if 'lr' in first_group:
                             mlflow.log_param('learning_rate', first_group['lr'])
                         if 'weight_decay' in first_group:
                             mlflow.log_param('weight_decay', first_group['weight_decay'])
+                        print("✏️ MLflow optimizer params logged: ['learning_rate', 'weight_decay']")
             except Exception as e:
-                print(f"Warning: Failed to log optimizer parameters to MLflow: {e}")
+                print(f"✏️⚠️ Warning: Failed to log optimizer parameters to MLflow: {e}")
         
         for epoch in range(start_epoch, args.epoches):
 
@@ -193,21 +195,23 @@ class DetSolver(BaseSolver):
                             import mlflow
                             # Log last.pth every epoch, checkpoint{epoch:04}.pth periodically
                             artifact_name = "checkpoints/last.pth" if checkpoint_path.name == "last.pth" else f"checkpoints/{checkpoint_path.name}"
-                            mlflow.log_artifact(str(checkpoint_path), artifact_path=artifact_name)
+                            mlflow.log_artifact(str(checkpoint_path), name=artifact_name)
+                            print(f"✏️ MLflow checkpoint logged: {artifact_name}")
                         except Exception as e:
-                            print(f"Warning: Failed to log checkpoint to MLflow: {e}")
+                            print(f"✏️⚠️ Warning: Failed to log checkpoint to MLflow: {e}")
 
-            # Save checkpoint for stage 2 as well (for resume capability)
-            if self.output_dir and epoch >= self.train_dataloader.collate_fn.stop_epoch:
-                checkpoint_path = self.output_dir / 'last.pth'
-                dist_utils.save_on_master(self.state_dict(), checkpoint_path)
-                # Log checkpoint to MLflow for resume capability
-                if hasattr(self, 'mlflow_run') and self.mlflow_run and dist_utils.is_main_process():
-                    try:
-                        import mlflow
-                        mlflow.log_artifact(str(checkpoint_path), artifact_path="checkpoints/last.pth")
-                    except Exception as e:
-                        print(f"Warning: Failed to log checkpoint to MLflow: {e}")
+        # Save checkpoint for stage 2 as well (for resume capability)
+        if self.output_dir and epoch >= self.train_dataloader.collate_fn.stop_epoch:
+            checkpoint_path = self.output_dir / 'last.pth'
+            dist_utils.save_on_master(self.state_dict(), checkpoint_path)
+            # Log checkpoint to MLflow for resume capability
+            if hasattr(self, 'mlflow_run') and self.mlflow_run and dist_utils.is_main_process():
+                try:
+                    import mlflow
+                    mlflow.log_artifact(str(checkpoint_path), name="checkpoints/last.pth")
+                    print("✏️ MLflow checkpoint logged: checkpoints/last.pth")
+                except Exception as e:
+                    print(f"✏️⚠️ Warning: Failed to log checkpoint to MLflow: {e}")
 
             module = self.ema.module if self.ema else self.model
             test_stats, coco_evaluator = evaluate(
@@ -257,12 +261,13 @@ class DetSolver(BaseSolver):
                                     module = self.ema.module if self.ema else self.model
                                     mlflow.pytorch.log_model(
                                         dist_utils.de_parallel(module),
-                                        artifact_path="best_model_stg2",
+                                        name="best_model_stg2",
                                         registered_model_name=None
                                     )
                                     mlflow.log_metric(f'best_{k}_stg2', test_stats[k][0], step=epoch)
+                                    print(f"✏️ MLflow best model logged: stage=2 metric={k} value={test_stats[k][0]:.4f}")
                                 except Exception as e:
-                                    print(f"Warning: Failed to log model to MLflow: {e}")
+                                    print(f"✏️⚠️ Warning: Failed to log model to MLflow: {e}")
                     else:
                         top1 = max(test_stats[k][0], top1)
                         dist_utils.save_on_master(self.state_dict(), self.output_dir / 'best_stg1.pth')
@@ -274,12 +279,13 @@ class DetSolver(BaseSolver):
                                 module = self.ema.module if self.ema else self.model
                                 mlflow.pytorch.log_model(
                                     dist_utils.de_parallel(module),
-                                    artifact_path="best_model_stg1",
+                                    name="best_model_stg1",
                                     registered_model_name=None
                                 )
                                 mlflow.log_metric(f'best_{k}_stg1', test_stats[k][0], step=epoch)
+                                print(f"✏️ MLflow best model logged: stage=1 metric={k} value={test_stats[k][0]:.4f}")
                             except Exception as e:
-                                print(f"Warning: Failed to log model to MLflow: {e}")
+                                print(f"✏️⚠️ Warning: Failed to log model to MLflow: {e}")
 
                 elif epoch >= self.train_dataloader.collate_fn.stop_epoch:
                     best_stat = {'epoch': -1, }
@@ -317,8 +323,9 @@ class DetSolver(BaseSolver):
                         lr = self.optimizer.param_groups[0].get('lr', None)
                         if lr is not None:
                             mlflow.log_metric('learning_rate', lr, step=epoch)
+                    print(f"✏️ MLflow metrics logged for epoch {epoch}")
                 except Exception as e:
-                    print(f"Warning: Failed to log metrics to MLflow: {e}")
+                    print(f"✏️⚠️ Warning: Failed to log metrics to MLflow: {e}")
 
                 # for evaluation logs
                 if coco_evaluator is not None:
@@ -341,8 +348,9 @@ class DetSolver(BaseSolver):
                 import mlflow
                 mlflow.log_metric('total_training_time_seconds', total_time)
                 mlflow.log_metric('total_training_time_hours', total_time / 3600)
+                print("✏️ MLflow training time logged")
             except Exception as e:
-                print(f"Warning: Failed to log training time to MLflow: {e}")
+                print(f"✏️⚠️ Warning: Failed to log training time to MLflow: {e}")
 
 
     def val(self, ):
