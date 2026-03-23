@@ -4,7 +4,7 @@ evaluator:
   type: CocoEvaluator
   iou_types: ['bbox', ]
 
-num_classes: 4 # your dataset classes
+num_classes: 5 # your dataset classes
 remap_mscoco_category: False
 
 train_dataloader:
