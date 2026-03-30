@@ -200,18 +200,18 @@ class DetSolver(BaseSolver):
                         except Exception as e:
                             print(f"✏️⚠️ Warning: Failed to log checkpoint to MLflow: {e}")
 
-        # Save checkpoint for stage 2 as well (for resume capability)
-        if self.output_dir and epoch >= self.train_dataloader.collate_fn.stop_epoch:
-            checkpoint_path = self.output_dir / 'last.pth'
-            dist_utils.save_on_master(self.state_dict(), checkpoint_path)
-            # Log checkpoint to MLflow for resume capability
-            if hasattr(self, 'mlflow_run') and self.mlflow_run and dist_utils.is_main_process():
-                try:
-                    import mlflow
-                    mlflow.log_artifact(str(checkpoint_path), name="checkpoints/last.pth")
-                    print("✏️ MLflow checkpoint logged: checkpoints/last.pth")
-                except Exception as e:
-                    print(f"✏️⚠️ Warning: Failed to log checkpoint to MLflow: {e}")
+            # Save checkpoint for stage 2 as well (for resume capability)
+            if self.output_dir and epoch >= self.train_dataloader.collate_fn.stop_epoch:
+                checkpoint_path = self.output_dir / 'last.pth'
+                dist_utils.save_on_master(self.state_dict(), checkpoint_path)
+                # Log checkpoint to MLflow for resume capability
+                if hasattr(self, 'mlflow_run') and self.mlflow_run and dist_utils.is_main_process():
+                    try:
+                        import mlflow
+                        mlflow.log_artifact(str(checkpoint_path), name="checkpoints/last.pth")
+                        print("✏️ MLflow checkpoint logged: checkpoints/last.pth")
+                    except Exception as e:
+                        print(f"✏️⚠️ Warning: Failed to log checkpoint to MLflow: {e}")
 
             module = self.ema.module if self.ema else self.model
             test_stats, coco_evaluator = evaluate(
