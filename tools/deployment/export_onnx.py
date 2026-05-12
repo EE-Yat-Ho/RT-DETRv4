@@ -60,7 +60,7 @@ def main(args, ):
     model = Model()
     
     # ONNX export 전에 모델을 한 번 실행해 그래프를 추적하기 위한 더미 데이터
-    data = torch.rand(32, 3, 640, 640)
+    data = torch.rand(1, 3, 640, 640)
     _ = model(data)
 
     dynamic_axes = {
