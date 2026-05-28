@@ -60,27 +60,22 @@ def main(args, ):
     model.eval()
 
     # ONNX export 전에 모델을 한 번 실행해 그래프를 추적하기 위한 더미 데이터
-    data = torch.rand(1, 3, 640, 640)
+    # NOTE: batch=1로 trace하면 dynamo가 batch 차원을 1로 specialize하므로 2로 둠
+    data = torch.rand(2, 3, 640, 640)
     _ = model(data)
-
-    dynamic_axes = {
-        'images': {0: 'N'},
-        'output': {0: 'N'},
-    }
 
     output_file = args.resume.replace('.pth', '.onnx') if args.resume else 'model.onnx'
 
+    batch_dim = torch.export.Dim('N')
     torch.onnx.export(
         model,
         (data,),
         output_file,
         input_names=['images'],
         output_names=['output'],
-        dynamic_axes=dynamic_axes,
-        opset_version=17,
-        verbose=False,
-        do_constant_folding=True,
-        dynamo=False,
+        dynamic_shapes={'images': {0: batch_dim}},
+        opset_version=18,
+        dynamo=True,
     )
 
     if args.check:
