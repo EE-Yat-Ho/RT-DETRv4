@@ -46,10 +46,9 @@ def main(args, ):
 
         def forward(self, images):
             outputs = self.model(images)
-            # 고정된 크기 사용
-            orig_target_sizes = torch.tensor([[640, 640]], device=images.device, dtype=torch.int64)
-            if images.shape[0] > 1:
-                orig_target_sizes = orig_target_sizes.repeat(images.shape[0], 1)
+            orig_target_sizes = torch.tensor(
+                [[640, 640]], device=images.device, dtype=torch.int64
+            ).repeat(images.shape[0], 1)
             labels, boxes, scores = self.postprocessor(outputs, orig_target_sizes)
             
             # 타입 통일 및 concat: [boxes(4), scores(1), labels(1)]
@@ -58,13 +57,15 @@ def main(args, ):
             return output
 
     model = Model()
-    
+    model.eval()
+
     # ONNX export 전에 모델을 한 번 실행해 그래프를 추적하기 위한 더미 데이터
-    data = torch.rand(32, 3, 640, 640)
+    data = torch.rand(1, 3, 640, 640)
     _ = model(data)
 
     dynamic_axes = {
-        'images': {0: 'N', },
+        'images': {0: 'N'},
+        'output': {0: 'N'},
     }
 
     output_file = args.resume.replace('.pth', '.onnx') if args.resume else 'model.onnx'
@@ -76,9 +77,10 @@ def main(args, ):
         input_names=['images'],
         output_names=['output'],
         dynamic_axes=dynamic_axes,
-        opset_version=16,
+        opset_version=17,
         verbose=False,
         do_constant_folding=True,
+        dynamo=False,
     )
 
     if args.check:
@@ -90,9 +92,10 @@ def main(args, ):
     if args.simplify:
         import onnx
         import onnxsim
-        dynamic = True
-        input_shapes = {'images': data.shape} if dynamic else None
-        onnx_model_simplify, check = onnxsim.simplify(output_file, test_input_shapes=input_shapes)
+        onnx_model_simplify, check = onnxsim.simplify(
+            output_file,
+            test_input_shapes={'images': data.shape},
+        )
         onnx.save(onnx_model_simplify, output_file)
         print(f'Simplify onnx model {check}...')
 
