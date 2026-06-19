@@ -140,7 +140,9 @@ def warp_model(
     compile_mode: str='reduce-overhead',
     **kwargs
 ):
-    if is_dist_available_and_initialized():
+    # 단일 GPU(world_size <= 1)에서는 DDP/DP 래핑이 이득 없이 제약(미사용 파라미터 검사 등)만
+    # 추가하므로 건너뛴다. torchrun으로 띄워 process group이 초기화돼 있어도 world_size가 1이면 그냥 원본 모델을 쓴다.
+    if is_dist_available_and_initialized() and get_world_size() > 1:
         rank = get_rank()
         model = nn.SyncBatchNorm.convert_sync_batchnorm(model) if sync_bn else model
         if dist_mode == 'dp':
