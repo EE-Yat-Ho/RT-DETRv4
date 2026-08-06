@@ -73,7 +73,9 @@ def train_one_epoch(self_lr_scheduler, lr_scheduler, model: torch.nn.Module, cri
                 teacher_encoder_output_for_distillation = teacher_model(samples).detach()
 
         if scaler is not None:
-            with torch.autocast(device_type=str(device), cache_enabled=True):
+            # bf16 autocast: 지수 범위가 fp32와 동일(±3.4e38)해 fp16 오버플로(±65504)로
+            # 인한 encoder activation NaN 폭발을 원천 차단. 5090 텐서코어에서 fp16과 속도 동일.
+            with torch.autocast(device_type=str(device), dtype=torch.bfloat16, cache_enabled=True):
                 outputs = model(samples, targets=targets,
                                 teacher_encoder_output=teacher_encoder_output_for_distillation)
 
