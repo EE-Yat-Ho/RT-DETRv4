@@ -54,3 +54,21 @@ train_dataloader:
   collate_fn:
     mixup_epochs: [4, 64]
     stop_epoch: 120
+
+  # --- Repeat Factor Sampling (opt-in, 현재 ON) ----------------------------
+  # 아래 sampler 블록을 주석 처리하면 기존 균등 랜덤 샘플링(RandomSampler)
+  # 으로 완전히 동일하게 되돌아갑니다.
+  #
+  # 주의: 이 블록을 켠 채로 기존 체크포인트를 --resume 하지 마세요.
+  # iter_per_epoch이 4451 -> 5318로 바뀌는데 FlatCosineLRScheduler는
+  # 체크포인트에서 복원되지 않고 매번 새로 계산되므로, LR 곡선의
+  # flat/cosine 경계가 이동해 재개 지점에서 불연속이 생깁니다.
+  # ON/OFF 전환은 항상 처음부터 학습하는 실험에서만 하세요.
+  #
+  # repeat_thresh <= 0 이면 t = max_c f(c) 로 자동 설정되므로, 클래스가
+  # 추가되거나 데이터 수가 바뀌어도 여기를 다시 손댈 필요가 없습니다.
+  # 현재 데이터 기준: LicensePlate x1.93, 에폭 길이 x1.195
+  sampler:
+    type: RepeatFactorSampler
+    repeat_thresh: -1
+    power: 0.5

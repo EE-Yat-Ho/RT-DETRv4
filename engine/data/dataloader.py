@@ -49,6 +49,8 @@ class DataLoader(data.DataLoader):
         self._epoch = epoch
         self.dataset.set_epoch(epoch)
         self.collate_fn.set_epoch(epoch)
+        if hasattr(self.sampler, 'set_epoch'):
+            self.sampler.set_epoch(epoch)
 
     @property
     def epoch(self):
