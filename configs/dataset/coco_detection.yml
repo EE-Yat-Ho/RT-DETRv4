@@ -4,7 +4,8 @@ evaluator:
   type: CocoEvaluator
   iou_types: ['bbox', ]
 
-num_classes: 5 # your dataset classes (Fire, Smoke, Person, LicensePlate; max id 4 + 1)
+num_classes: 79 # 번호판 OCR: 숫자 0-9 + 한글 음절 + 지역명 + 특수 (category id 1~78, max id 78 + 1)
+                # id 0 'objects'는 Roboflow가 넣은 더미 supercategory로 어노테이션이 0개다.
 remap_mscoco_category: False
 
 train_dataloader:

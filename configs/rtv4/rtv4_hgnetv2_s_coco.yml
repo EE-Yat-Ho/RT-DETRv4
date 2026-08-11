@@ -48,6 +48,25 @@ no_aug_epoch: 12
 train_dataloader:
   dataset:
     transforms:
+      # --- 좌우 반전 제거 (번호판 OCR) ------------------------------------
+      # 글자의 좌우 방향 자체가 클래스이므로 RandomHorizontalFlip을 쓰면
+      # 뒤집힌 '2'/'ga'에 원래 라벨이 그대로 붙어 학습 샘플의 절반이
+      # 틀린 정답을 갖게 된다. base/rtv4.yml의 ops 리스트에서 flip만 뺀
+      # 전체 목록을 여기 다시 쓴다 (YAML 리스트는 병합이 아니라 통째 교체).
+      #
+      # 주의: HorizontalFlip은 policy.ops에 없어서 정책으로 끌 수 없다.
+      # 반드시 ops 리스트 자체에서 빼야 한다.
+      ops:
+        - {type: Mosaic, output_size: 320, rotation_range: 10, translation_range: [0.1, 0.1], scaling_range: [0.5, 1.5],
+           probability: 1.0, fill_value: 0, use_cache: False, max_cached_images: 50, random_pop: True}
+        - {type: RandomPhotometricDistort, p: 0.5}
+        - {type: RandomZoomOut, fill: 0}
+        - {type: RandomIoUCrop, p: 0.8}
+        - {type: SanitizeBoundingBoxes, min_size: 1}
+        - {type: Resize, size: [640, 640], }
+        - {type: SanitizeBoundingBoxes, min_size: 1}
+        - {type: ConvertPILImage, dtype: 'float32', scale: True}
+        - {type: ConvertBoxes, fmt: 'cxcywh', normalize: True}
       policy:
         epoch: [4, 64, 120]
 
@@ -55,20 +74,21 @@ train_dataloader:
     mixup_epochs: [4, 64]
     stop_epoch: 120
 
-  # --- Repeat Factor Sampling (opt-in, 현재 ON) ----------------------------
-  # 아래 sampler 블록을 주석 처리하면 기존 균등 랜덤 샘플링(RandomSampler)
-  # 으로 완전히 동일하게 되돌아갑니다.
+  # --- Repeat Factor Sampling (opt-in, 현재 OFF) ---------------------------
+  # 번호판 OCR 데이터셋에서는 끈다. 이유:
+  #   1) 자동 임계값(t = max_c f(c) = 0.499)이면 에폭 길이가 x4.76으로
+  #      폭증한다. 숫자는 f~0.50인데 한글 음절/지역명은 f~0.021이라
+  #      희귀 클래스 r(c)가 4.8배까지 올라가기 때문.
+  #   2) 그렇게 늘려도 얻는 게 없다. 모든 번호판이 이미 한글 1글자를
+  #      포함하므로 이 불균형은 샘플링으로 고칠 수 있는 게 아니라
+  #      데이터 구조 자체(숫자 7개 : 한글 1개)에서 오는 것이다.
   #
-  # 주의: 이 블록을 켠 채로 기존 체크포인트를 --resume 하지 마세요.
-  # iter_per_epoch이 4451 -> 5318로 바뀌는데 FlatCosineLRScheduler는
-  # 체크포인트에서 복원되지 않고 매번 새로 계산되므로, LR 곡선의
-  # flat/cosine 경계가 이동해 재개 지점에서 불연속이 생깁니다.
-  # ON/OFF 전환은 항상 처음부터 학습하는 실험에서만 하세요.
+  # 다시 켜려면 아래 주석을 해제한다. 단, 기존 체크포인트를 --resume 하면서
+  # ON/OFF를 전환하지 말 것: iter_per_epoch이 바뀌는데
+  # FlatCosineLRScheduler는 체크포인트에서 복원되지 않고 매번 새로
+  # 계산되므로 LR 곡선의 flat/cosine 경계가 이동해 불연속이 생긴다.
   #
-  # repeat_thresh <= 0 이면 t = max_c f(c) 로 자동 설정되므로, 클래스가
-  # 추가되거나 데이터 수가 바뀌어도 여기를 다시 손댈 필요가 없습니다.
-  # 현재 데이터 기준: LicensePlate x1.93, 에폭 길이 x1.195
-  sampler:
-    type: RepeatFactorSampler
-    repeat_thresh: -1
-    power: 0.5
+  # sampler:
+  #   type: RepeatFactorSampler
+  #   repeat_thresh: -1   # <=0 이면 t = max_c f(c) 로 자동 설정
+  #   power: 0.5
