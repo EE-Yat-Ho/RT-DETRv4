@@ -67,7 +67,8 @@ train_dataloader:
   #
   # repeat_thresh <= 0 이면 t = max_c f(c) 로 자동 설정되므로, 클래스가
   # 추가되거나 데이터 수가 바뀌어도 여기를 다시 손댈 필요가 없습니다.
-  # 현재 데이터 기준: LicensePlate x1.93, 에폭 길이 x1.195
+  # 현재 데이터 기준: FallenPerson x3.16, LicensePlate x1.91, 에폭 길이 x1.296
+  # (142,462 -> 184,664장. 어노테이션 없는 12,293장도 r=1로 합계에 포함된다)
   sampler:
     type: RepeatFactorSampler
     repeat_thresh: -1
