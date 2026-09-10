@@ -38,6 +38,12 @@ def main(args, ):
         # raise AttributeError('Only support resume to load model.state_dict by now.')
         print('not load model.state_dict, use default init state dict...')
 
+    # 입력 해상도는 config의 eval_spatial_size([h, w])를 따른다.
+    # 모델이 이 크기로 위치인코딩과 앵커를 캐싱하므로 다른 크기로 trace하면
+    # shape 불일치로 죽는다 (320 설정에 640을 넣으면 400 vs 100).
+    eval_h, eval_w = cfg.yaml_cfg.get('eval_spatial_size', [640, 640])
+    print(f'export input size: {eval_h}x{eval_w} (from eval_spatial_size)')
+
     class Model(nn.Module):
         def __init__(self, ) -> None:
             super().__init__()
@@ -46,8 +52,9 @@ def main(args, ):
 
         def forward(self, images):
             outputs = self.model(images)
+            # postprocessor는 정규화 xyxy에 [w, h, w, h]를 곱한다 -> (w, h) 순서
             orig_target_sizes = torch.tensor(
-                [[640, 640]], device=images.device, dtype=torch.int64
+                [[eval_w, eval_h]], device=images.device, dtype=torch.int64
             ).repeat(images.shape[0], 1)
             labels, boxes, scores = self.postprocessor(outputs, orig_target_sizes)
             
@@ -61,7 +68,7 @@ def main(args, ):
 
     # ONNX export 전에 모델을 한 번 실행해 그래프를 추적하기 위한 더미 데이터
     # NOTE: batch=1로 trace하면 dynamo가 batch 차원을 1로 specialize하므로 2로 둠
-    data = torch.rand(2, 3, 640, 640)
+    data = torch.rand(2, 3, eval_h, eval_w)
     _ = model(data)
 
     output_file = args.resume.replace('.pth', '.onnx') if args.resume else 'model.onnx'
