@@ -132,28 +132,59 @@ def draw(images, labels, boxes, scores, thrh=0.4):
 
     return images
 
-def process_image(m, file_path, device):
+def engine_input_size(m, default=(640, 640)):
+    """TRT 엔진의 images 바인딩 shape([N, 3, H, W])에서 전처리 크기를 읽는다.
+
+    엔진은 export_onnx.py가 config의 eval_spatial_size로 뽑은 ONNX에서
+    빌드되므로, 엔진 파일만 보면 320/640 어느 쪽인지 알 수 있다.
+    """
+    binding = m.bindings.get('images')
+    if binding is None:
+        return default
+    h, w = int(binding.shape[2]), int(binding.shape[3])
+    if h <= 0 or w <= 0:
+        print(f'images 바인딩 H/W가 동적({h}x{w})이라 {default}로 대체합니다.')
+        return default
+    return (h, w)
+
+
+def build_blob(m, im_data, orig_size, device):
+    """현재 export는 images 하나만 받고, 구버전은 orig_target_sizes도 받는다."""
+    blob = {'images': im_data.to(device)}
+    if 'orig_target_sizes' in m.input_names:
+        blob['orig_target_sizes'] = orig_size.to(device)
+    return blob
+
+
+def unpack_output(output):
+    """export_onnx.py는 [N, 300, 6] = (boxes4, score, label) 하나를 내보내고,
+    구버전 export는 labels/boxes/scores 셋을 따로 내보낸다."""
+    if 'labels' in output:
+        return output['labels'], output['boxes'], output['scores']
+    o = next(iter(output.values()))
+    return o[..., 5].long(), o[..., :4], o[..., 4]
+
+
+def process_image(m, file_path, device, size):
     im_pil = Image.open(file_path).convert('RGB')
     w, h = im_pil.size
     orig_size = torch.tensor([w, h])[None].to(device)
 
     transforms = T.Compose([
-        T.Resize((640, 640)),
+        T.Resize(size),
         T.ToTensor(),
     ])
     im_data = transforms(im_pil)[None]
 
-    blob = {
-        'images': im_data.to(device),
-        'orig_target_sizes': orig_size.to(device),
-    }
+    blob = build_blob(m, im_data, orig_size, device)
 
     output = m(blob)
-    result_images = draw([im_pil], output['labels'], output['boxes'], output['scores'])
+    labels, boxes, scores = unpack_output(output)
+    result_images = draw([im_pil], labels, boxes, scores)
     result_images[0].save('trt_result.jpg')
     print("Image processing complete. Result saved as 'result.jpg'.")
 
-def process_video(m, file_path, device):
+def process_video(m, file_path, device, size):
     cap = cv2.VideoCapture(file_path)
 
     # Get video properties
@@ -166,7 +197,7 @@ def process_video(m, file_path, device):
     out = cv2.VideoWriter('trt_result.mp4', fourcc, fps, (orig_w, orig_h))
 
     transforms = T.Compose([
-        T.Resize((640, 640)),
+        T.Resize(size),
         T.ToTensor(),
     ])
 
@@ -185,15 +216,13 @@ def process_video(m, file_path, device):
 
         im_data = transforms(frame_pil)[None]
 
-        blob = {
-            'images': im_data.to(device),
-            'orig_target_sizes': orig_size.to(device),
-        }
+        blob = build_blob(m, im_data, orig_size, device)
 
         output = m(blob)
+        labels, boxes, scores = unpack_output(output)
 
         # Draw detections on the frame
-        result_images = draw([frame_pil], output['labels'], output['boxes'], output['scores'])
+        result_images = draw([frame_pil], labels, boxes, scores)
 
         # Convert back to OpenCV image
         frame = cv2.cvtColor(np.array(result_images[0]), cv2.COLOR_RGB2BGR)
@@ -220,10 +249,14 @@ if __name__ == '__main__':
 
     m = TRTInference(args.trt, device=args.device)
 
+    # 전처리 크기를 엔진 바인딩에서 읽는다 (하드코딩하지 않음)
+    size = engine_input_size(m)
+    print(f'inference input size: {size[0]}x{size[1]} (from TRT engine binding)')
+
     file_path = args.input
     if os.path.splitext(file_path)[-1].lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
         # Process as image
-        process_image(m, file_path, args.device)
+        process_image(m, file_path, args.device, size)
     else:
         # Process as video
-        process_video(m, file_path, args.device)
+        process_video(m, file_path, args.device, size)

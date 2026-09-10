@@ -33,13 +33,13 @@ def draw(images, labels, boxes, scores, thrh=0.4):
         im.save('torch_results.jpg')
 
 
-def process_image(model, device, file_path):
+def process_image(model, device, file_path, size):
     im_pil = Image.open(file_path).convert('RGB')
     w, h = im_pil.size
     orig_size = torch.tensor([[w, h]]).to(device)
 
     transforms = T.Compose([
-        T.Resize((640, 640)),
+        T.Resize(size),
         T.ToTensor(),
     ])
     im_data = transforms(im_pil).unsqueeze(0).to(device)
@@ -50,7 +50,7 @@ def process_image(model, device, file_path):
     draw([im_pil], labels, boxes, scores)
 
 
-def process_video(model, device, file_path):
+def process_video(model, device, file_path, size):
     cap = cv2.VideoCapture(file_path)
 
     # Get video properties
@@ -63,7 +63,7 @@ def process_video(model, device, file_path):
     out = cv2.VideoWriter('torch_results.mp4', fourcc, fps, (orig_w, orig_h))
 
     transforms = T.Compose([
-        T.Resize((640, 640)),
+        T.Resize(size),
         T.ToTensor(),
     ])
 
@@ -136,15 +136,20 @@ def main(args):
     device = args.device
     model = Model().to(device)
 
+    # 전처리 크기는 config의 eval_spatial_size([h, w])를 따른다.
+    # 모델이 이 크기로 위치인코딩을 캐싱하므로 다른 크기를 넣으면 죽는다.
+    size = tuple(cfg.yaml_cfg.get('eval_spatial_size', [640, 640]))
+    print(f'inference input size: {size[0]}x{size[1]} (from eval_spatial_size)')
+
     # Check if the input file is an image or a video
     file_path = args.input
     if os.path.splitext(file_path)[-1].lower() in ['.jpg', '.jpeg', '.png', '.bmp']:
         # Process as image
-        process_image(model, device, file_path)
+        process_image(model, device, file_path, size)
         print("Image processing complete.")
     else:
         # Process as video
-        process_video(model, device, file_path)
+        process_video(model, device, file_path, size)
 
 
 if __name__ == '__main__':
