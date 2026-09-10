@@ -1,0 +1,67 @@
+# 몽골 번호판 OCR
+# 잘린 번호판 이미지 위의 글자/기호를 하나씩 검출하는 태스크.
+# 검출용 rtv4_hgnetv2_s_coco.yml을 그대로 상속하고 아래 3가지만 덮어쓴다.
+#   1) 클래스 41종 (num_classes 42)
+#   2) 입력 해상도 320 (기본 640)
+#   3) 좌우 반전(RandomHorizontalFlip) 제거  <- 아래 주의사항 참고
+#
+# output_dir은 상속받은 ./outputs/rtv4_hgnetv2_s_coco를 그대로 쓴다.
+__include__: [
+  './rtv4_hgnetv2_s_coco.yml',
+]
+
+# ---------------------------------------------------------------
+# 클래스 (category id -> name)
+#   1 ~ 10 : 0 1 2 3 4 5 6 7 8 9                          (숫자 10종)
+#  11 ~ 39 : А Б В Г Д Е Ж З И К Л М Н О Ө П Р С Т У Ү
+#            Ф Х Ц Ч Ш Э Ю Я                               (키릴 대문자 29종)
+#      40 : MNG
+#      41 : SOYOMBO
+# ---------------------------------------------------------------
+num_classes: 42   # 최대 category id 41 + 1
+
+# ---------------------------------------------------------------
+# 입력 해상도 320
+# HybridEncoder/DFINETransformer의 앵커·위치인코딩이 이 값으로 생성된다.
+# 320 % 32 == 0 이어야 하고, DINOv3 teacher는 320 -> avgpool 2x2 -> 160,
+# 160 / patch 16 = 10x10 이 student F5(320/32 = 10x10)와 일치한다.
+# ---------------------------------------------------------------
+eval_spatial_size: [320, 320]   # h w
+
+# ---------------------------------------------------------------
+# ⚠️ RandomHorizontalFlip 금지
+# 이 태스크는 글자의 좌우 방향 자체가 클래스다. 뒤집힌 글자에 원래 라벨이
+# 그대로 붙으면 학습 샘플의 절반이 틀린 정답을 갖게 된다.
+# 프레임워크 기본값(configs/base/rtv4.yml)에는 flip이 들어 있으므로
+# ops 리스트를 flip 없이 통째로 다시 정의해 덮어쓴다. YAML 리스트는
+# 병합이 아니라 전체 교체라서(engine/core/yaml_utils.py:58) 이 방식이 동작한다.
+#
+# Mosaic의 output_size는 타일 1장의 크기다. 2x2로 붙여 최종 해상도가 되므로
+# 320 입력에서는 160이어야 한다 (640 입력에서 320이었던 것과 동일한 비율).
+# ---------------------------------------------------------------
+train_dataloader:
+  dataset:
+    transforms:
+      ops:
+        - {type: Mosaic, output_size: 160, rotation_range: 10, translation_range: [0.1, 0.1], scaling_range: [0.5, 1.5],
+           probability: 1.0, fill_value: 0, use_cache: False, max_cached_images: 50, random_pop: True}
+        - {type: RandomPhotometricDistort, p: 0.5}
+        - {type: RandomZoomOut, fill: 0}
+        - {type: RandomIoUCrop, p: 0.8}
+        - {type: SanitizeBoundingBoxes, min_size: 1}
+        - {type: Resize, size: [320, 320], }
+        - {type: SanitizeBoundingBoxes, min_size: 1}
+        - {type: ConvertPILImage, dtype: 'float32', scale: True}
+        - {type: ConvertBoxes, fmt: 'cxcywh', normalize: True}
+
+  # multi-scale 기준 해상도. base_size_repeat=20과 함께
+  # [224, 256, 288, 320x20, 384, 352, 320] 스케일이 생성된다.
+  collate_fn:
+    base_size: 320
+
+val_dataloader:
+  dataset:
+    transforms:
+      ops:
+        - {type: Resize, size: [320, 320], }
+        - {type: ConvertPILImage, dtype: 'float32', scale: True}
