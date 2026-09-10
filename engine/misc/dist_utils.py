@@ -162,15 +162,25 @@ def de_model(model):
 
 
 def warp_loader(loader, shuffle=False):
-    if is_dist_available_and_initialized():
+    sampler_cfg = getattr(loader, 'sampler_cfg', None)
+    if sampler_cfg is None and not is_dist_available_and_initialized():
+        return loader
+
+    if sampler_cfg is not None:
+        # A custom sampler handles both shuffling and the rank split itself.
+        from ..data.sampler import build_sampler
+        sampler = build_sampler(sampler_cfg, loader.dataset, shuffle=shuffle)
+    else:
         sampler = DistributedSampler(loader.dataset, shuffle=shuffle)
-        loader = DataLoader(loader.dataset,
-                            loader.batch_size,
-                            sampler=sampler,
-                            drop_last=loader.drop_last,
-                            collate_fn=loader.collate_fn,
-                            pin_memory=loader.pin_memory,
-                            num_workers=loader.num_workers)
+
+    loader = DataLoader(loader.dataset,
+                        loader.batch_size,
+                        sampler=sampler,
+                        drop_last=loader.drop_last,
+                        collate_fn=loader.collate_fn,
+                        pin_memory=loader.pin_memory,
+                        num_workers=loader.num_workers)
+    loader.shuffle = shuffle
     return loader
 
 

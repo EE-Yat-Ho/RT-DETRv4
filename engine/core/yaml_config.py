@@ -208,7 +208,12 @@ class YAMLConfig(BaseConfig):
         if 'total_batch_size' in global_cfg[name]:
             # pop unexpected key for dataloader init
             _ = global_cfg[name].pop('total_batch_size')
+        # Opt-in custom sampler. Kept out of the DataLoader kwargs and stashed
+        # for `dist_utils.warp_loader`, which is where the built dataset (that
+        # the sampler needs) is available.
+        sampler_cfg = global_cfg[name].pop('sampler', None)
         print(f'building {name} with batch_size={bs}...')
         loader = create(name, global_cfg, batch_size=bs)
         loader.shuffle = self.yaml_cfg[name].get('shuffle', False)
+        loader.sampler_cfg = sampler_cfg
         return loader

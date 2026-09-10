@@ -21,7 +21,7 @@ ema:
 
 
 # MLflow settings
-use_mlflow: True
+use_mlflow: False  # 비활성화: DagsHub 원격 업로드로 학습이 멈추는 문제 때문에 끔
 mlflow_tracking_uri: https://dagshub.com/trustay.ai.lab/rtv4.mlflow  # If null, uses default local file store (./mlruns)
 mlflow_experiment_name: 'rt-detrv4-experiment'  # Experiment name in MLflow
 mlflow_run_name: null  # If null, auto-generates with timestamp
